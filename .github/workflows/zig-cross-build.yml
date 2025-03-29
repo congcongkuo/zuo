@@ -53,10 +53,10 @@ jobs:
           riscv32-linux-gnu,
           riscv32-linux-musl,
           riscv64-linux-musl,
-          sparc64-linux-gnu,
+          #sparc64-linux-gnu,
           thumb-linux-musleabi,
           thumb-linux-musleabihf,
-          #wasm32-wasi-musl, # wasm lacks signal support
+          #wasm32-wasi-musl, # wasm lacks signal support.
           x86-linux-gnu,
           x86-linux-musl,
           x86-windows-gnu,

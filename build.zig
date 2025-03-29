@@ -69,7 +69,6 @@ pub fn build(b: *std.Build) void {
             else "",
         },
     });
-
     zuo0.linkLibC();
 
     // Run local/image.zuo script to generate image_zuo.c file.
@@ -130,35 +129,6 @@ pub fn build(b: *std.Build) void {
         flags.append("-Werror") catch unreachable;
     }
 
-    // same as to-run zuo in build.zuo
-    const zuo_run = b.addExecutable(.{
-        .linkage = if (enable_dynamic_linkage) .dynamic else .static,
-        .name = "zuo",
-        .root_module = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-
-    if (t.os.tag == .windows) {
-        // DZUO_LIB_PATH is a C macro, there are double amount of separators.
-        flags.append("-DZUO_LIB_PATH=\"..\\\\lib\"") catch unreachable;
-    } else {
-        flags.append("-DZUO_LIB_PATH=\"../lib\"") catch unreachable;
-    }
-    zuo_run.addCSourceFiles(.{
-        .files = source_files.items,
-        .flags = flags.items,
-    });
-
-    zuo_run.linkLibC();
-
-    zuo_run.step.dependOn(&image_zuo.step);
-    const zuorun_install = b.addInstallArtifact(zuo_run, .{
-        .dest_dir = .{.override = .{.custom = "to-run"}},
-    });
-    b.getInstallStep().dependOn(&zuorun_install.step);
-
     // same as to-install zuo in build.zuo
     const zuo = b.addExecutable(.{
         .linkage = if (enable_dynamic_linkage) .dynamic else .static,
@@ -168,9 +138,6 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-
-    // pop -DZUO_LIB_PATH flag for to-run zuo, share the other flags.
-    _ = flags.pop();
 
     flags.append(std.mem.concat(b.allocator, u8, &.{
         "-DZUO_LIB_PATH=",
@@ -185,13 +152,45 @@ pub fn build(b: *std.Build) void {
         .files = source_files.items,
         .flags = flags.items,
     });
-
     zuo.linkLibC();
 
     zuo.step.dependOn(&image_zuo.step);
     b.installArtifact(zuo);
 
-    // Tests
+    // same as to-run zuo in build.zuo
+    const zuo_run = b.addExecutable(.{
+        .linkage = if (enable_dynamic_linkage) .dynamic else .static,
+        .name = "zuo",
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
+    // pop -DZUO_LIB_PATH flag for to-install zuo, share the other flags.
+    _ = flags.pop();
+
+    if (t.os.tag == .windows) {
+        // DZUO_LIB_PATH is a C macro, there are double amount of separators.
+        flags.append("-DZUO_LIB_PATH=\"..\\\\lib\"") catch unreachable;
+    } else {
+        flags.append("-DZUO_LIB_PATH=\"../lib\"") catch unreachable;
+    }
+
+    zuo_run.addCSourceFiles(.{
+        .files = source_files.items,
+        .flags = flags.items,
+    });
+    zuo_run.linkLibC();
+
+    zuo_run.step.dependOn(&image_zuo.step);
+    const zuo_run_install = b.addInstallArtifact(zuo_run, .{
+        .dest_dir = .{.override = .{.custom = "to-run"}},
+    });
+    const to_run_step = b.step("to-run", "Build and install to-run zuo in build.zuo script");
+    to_run_step.dependOn(&zuo_run_install.step);
+
+    // Tests for to-install zuo.
     const test_step = b.step("test", "Run tests");
 
     const run_test_zuo = b.addRunArtifact(zuo);
