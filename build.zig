@@ -19,7 +19,8 @@ comptime {
 
 pub fn build(b: *std.Build) void {
     // Stage 0
-    // Install lib/zuo
+
+    // Install lib/zuo to standard lib path.
     const lib = b.addInstallDirectory(.{
         .source_dir = b.path("lib/zuo"),
         .install_dir = .{ .lib = {} },
@@ -27,6 +28,7 @@ pub fn build(b: *std.Build) void {
     });
 
     // zuo0 is only used to generate image_zuo.c file.
+
     // zuo0 is built to native target by default.
     // In some sepcial situation, user can set the target manually.
     const zuo0_target_option = b.option([]const u8, "zuo0-target",
@@ -40,18 +42,9 @@ pub fn build(b: *std.Build) void {
         "zuo0-enable-dynamic-linkage",
         "Enable dynamic linkage (otherwise static ones)") orelse true;
 
-    var zuo0_flags = std.ArrayList([]const u8).init(b.allocator);
-    defer zuo0_flags.deinit();
-
-    if (zuo0_t.os.tag == .windows) {
-        // If the version of the Microsoft C/C++ compiler is 17.00.51106.1, 
-        // the value of _MSC_VER is 1700.
-        // This maybe better then an arbitrary value.
-        zuo0_flags.append("-D_MSC_VER=1700") catch unreachable;
-    }
-    if(zuo0_t.isMinGW()) {
-        zuo0_flags.append("-D__MINGW32__") catch unreachable;
-    }
+    var escaped_path = std.ArrayList(u8).init(b.allocator);
+    defer escaped_path.deinit();
+    escapeWindowsPath(b.lib_dir, &escaped_path) catch unreachable;
 
     const zuo0 = b.addExecutable(.{
         .linkage = if (zuo0_enable_dynamic_linkage) .dynamic else .static,
@@ -61,19 +54,19 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
-    var path_list = std.ArrayList(u8).init(b.allocator);
-    defer path_list.deinit();
-    escapeWindowsPath(b.lib_dir, &path_list) catch unreachable;
-
     zuo0.addCSourceFile(.{
         .file = b.path("zuo.c"),
         .flags = &.{
             std.mem.concat(b.allocator, u8, &.{
                 "-DZUO_LIB_PATH=",
                 "\"",
-                if (zuo0_t.os.tag == .windows) path_list.items else b.lib_dir,
+                if (zuo0_t.os.tag == .windows) escaped_path.items
+                else b.lib_dir,
                 "\"",
-            }) catch unreachable,           
+            }) catch unreachable,
+            if (zuo0_t.isMinGW()) "-D__MINGW32__"
+            else if (zuo0_t.os.tag == .windows) "-D_MSC_VER=1700"
+            else "",
         },
     });
 
@@ -91,6 +84,7 @@ pub fn build(b: *std.Build) void {
     image_zuo.step.dependOn(&lib.step);
 
     // Stage 1
+
     // Shared configuration for to-run zuo and to-install zuo.
     const optimize = b.standardOptimizeOption(.{});
     const target = b.standardTargetOptions(.{});
@@ -104,7 +98,7 @@ pub fn build(b: *std.Build) void {
     const enable_werror = b.option(bool, "enable_werror",
         "Pass -Werror to the C compiler (treat warnings as errors)")
         orelse false;
-    
+
     var source_files = std.ArrayList([]const u8).init(b.allocator);
     defer source_files.deinit();
     var flags = std.ArrayList([]const u8).init(b.allocator);
@@ -114,14 +108,13 @@ pub fn build(b: *std.Build) void {
         "image_zuo.c",
     }) catch unreachable;
 
-    if (t.os.tag == .windows) {
-        // If the version of the Microsoft C/C++ compiler is 17.00.51106.1, 
+    if(t.isMinGW()) {
+        flags.append("-D__MINGW32__") catch unreachable;
+    } else if (t.os.tag == .windows) {
+        // If the version of the Microsoft C/C++ compiler is 17.00.51106.1,
         // the value of _MSC_VER is 1700.
         // This maybe better then an arbitrary value.
         flags.append("-D_MSC_VER=1700") catch unreachable;
-    }
-    if(t.isMinGW()) {
-        flags.append("-D__MINGW32__") catch unreachable;
     }
 
     // Extra user-defined flags (if any) to pass to the compiler.
@@ -146,8 +139,9 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+
     if (t.os.tag == .windows) {
-        // DZUO_LIB_PATH is a c macro, there are double amount of separators.
+        // DZUO_LIB_PATH is a C macro, there are double amount of separators.
         flags.append("-DZUO_LIB_PATH=\"..\\\\lib\"") catch unreachable;
     } else {
         flags.append("-DZUO_LIB_PATH=\"../lib\"") catch unreachable;
@@ -181,7 +175,8 @@ pub fn build(b: *std.Build) void {
     flags.append(std.mem.concat(b.allocator, u8, &.{
         "-DZUO_LIB_PATH=",
         "\"",
-        if (zuo0_t.os.tag == .windows) path_list.items else b.lib_dir,
+        if (zuo0_t.os.tag == .windows) escaped_path.items
+        else b.lib_dir,
         "\"",
         }) catch unreachable
     ) catch unreachable;
