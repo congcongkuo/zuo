@@ -1,7 +1,7 @@
 # This workflow uses Zig and its excellent cross-compilation support to test
 # compiling for multiple platforms. No tests are actually run since it would
 # require emulation.
-name: zig cross-compile
+name: Zig cross-compile
 
 on: [ push, pull_request ]
 
@@ -56,7 +56,7 @@ jobs:
           sparc64-linux-gnu,
           thumb-linux-musleabi,
           thumb-linux-musleabihf,
-          wasm32-wasi-musl,
+          #wasm32-wasi-musl, # wasm lacks signal support
           x86-linux-gnu,
           x86-linux-musl,
           x86-windows-gnu,
